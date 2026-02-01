@@ -9,7 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -224,21 +224,29 @@ document.addEventListener('contextmenu', function(e) {
 
 
             useEffect(() => {
-                if (page === 'create' && window.turnstile) {
-                    window.turnstile.render('#turnstile-container', {
-                        sitekey: '0x4AAAAAACWeHONWUu-61w-t', // ลองใช้ Test Key นี้ก่อนเพื่อทดสอบ UI
-                        theme: 'dark',
-                    });
+                useEffect(() => {
+                let timer;
+                if (page === 'create') {
+                    // ฟังก์ชันสำหรับสั่ง Render
+                    const renderTurnstile = () => {
+                        if (window.turnstile) {
+                            window.turnstile.render('#turnstile-container', {
+                                sitekey: '0x4AAAAAACWeHONWUu-61w-t', // ใช้ Site Key ของคุณ
+                                theme: 'dark',
+                                callback: function(token) {
+                                    console.log("Challenge Success");
+                                },
+                            });
+                        } else {
+                            // ถ้าสคริปต์ยังไม่มา ให้รอ 500ms แล้วลองใหม่
+                            timer = setTimeout(renderTurnstile, 500);
+                        }
+                    };
+                    
+                    renderTurnstile();
                 }
+                return () => { if(timer) clearTimeout(timer); };
             }, [page]);
-
-            // ใช้ดึงข้อมูลตาม Tab ที่เลือก
-            useEffect(() => {
-            // หากไม่มีการ Login ให้ล้างค่า Webhook ออกทันที
-            if (!adminData) {
-                setWebhookUrl("");
-                return;
-            }
 
     // 1. ดึง Webhook เฉพาะของแก๊งตัวเอง (ดึงใหม่ทุกครั้งที่ adminData เปลี่ยน)
     const gangDocRef = db.collection('artifacts').doc(appId)
@@ -1571,7 +1579,11 @@ document.addEventListener('contextmenu', function(e) {
                                             <div className="cf-turnstile" data-sitekey="0x4AAAAAACWeHONWUu-61w-t"></div>
                                         </div>
 
-                                        {/* ปุ่มยืนยันเดิมของคุณ */}
+                                        {/* วางไว้ก่อนปุ่ม handleCreate */}
+                                        <div className="flex justify-center my-6 min-h-[65px]">
+                                            <div id="turnstile-container"></div>
+                                        </div>
+
                                         <button 
                                             onClick={handleCreate} 
                                             disabled={loading}
