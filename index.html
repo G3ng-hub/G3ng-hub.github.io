@@ -408,17 +408,15 @@ document.addEventListener('contextmenu', function(e) {
                     };
 
 const handleCreate = async () => {
-    // 1. เช็คว่ากรอกชื่อและ ID หรือยัง
+    // 1. เช็คข้อมูลเบื้องต้น
     if (!formData.name || !formData.id) {
         return showNotify("กรุณาระบุข้อมูล Gang ให้ครบถ้วน", "error");
     }
 
-    // 2. ดึงค่าการยืนยันตัวตนจาก Cloudflare
+    // 2. เช็คการติ๊กถูก (Captcha)
     const turnstileResponse = window.turnstile ? window.turnstile.getResponse() : null;
-    
-    // ถ้ายังไม่ได้ติ๊ก หรือติ๊กไม่ผ่าน
     if (!turnstileResponse) {
-        return showNotify("กรุณาติ๊กยืนยันตัวตน (Captcha) ก่อนลงทะเบียน", "error");
+        return showNotify("กรุณาติ๊กยืนยันตัวตนก่อนลงทะเบียน", "error");
     }
 
     setLoading(true);
@@ -428,21 +426,13 @@ const handleCreate = async () => {
     const token = Math.random().toString(36).substr(2, 8).toUpperCase();
 
     try {
-        // ดึง IP ผู้ใช้ (Optional)
-        let userIp = "Unknown";
-        try {
-            const ipRes = await fetch('https://api.ipify.org?format=json');
-            const ipData = await ipRes.json();
-            userIp = ipData.ip;
-        } catch (e) {}
-
-        // เช็ค ID ซ้ำในระบบ
         const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('gangs').doc(cleanId);
         const snap = await docRef.get();
 
         if (snap.exists) {
             showNotify("ID นี้ถูกใช้งานในระบบแล้ว โปรดใช้ ID อื่น", "error");
-            if (window.turnstile) window.turnstile.reset(); // ต้องให้ติ๊กใหม่ถ้าข้อมูลผิด
+            // รีเซ็ตเพื่อให้ติ๊กใหม่ถ้าข้อมูลซ้ำ
+            if (window.turnstile) window.turnstile.reset(); 
         } else {
             // บันทึกข้อมูลลง Firebase
             await docRef.set({
@@ -479,7 +469,6 @@ const handleCreate = async () => {
             showNotify("ลงทะเบียนสำเร็จ!", "success");
             setSuccessData({ token, id: cleanId });
             setFormData({ name: '', id: '' });
-            if (window.turnstile) window.turnstile.reset(); // รีเซ็ตเพื่อความปลอดภัย
         }
     } catch (e) {
         showNotify("Error: " + e.message, "error");
