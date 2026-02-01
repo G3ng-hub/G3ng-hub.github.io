@@ -408,95 +408,81 @@ document.addEventListener('contextmenu', function(e) {
                     };
 
 const handleCreate = async () => {
-    // 1. ตรวจสอบข้อมูลพื้นฐาน
+    // 1. เช็คว่ากรอกชื่อและ ID หรือยัง
     if (!formData.name || !formData.id) {
         return showNotify("กรุณาระบุข้อมูล Gang ให้ครบถ้วน", "error");
     }
 
-    // 2. ตรวจสอบการยืนยันตัวตน (Cloudflare Turnstile)
+    // 2. ดึงค่าการยืนยันตัวตนจาก Cloudflare
     const turnstileResponse = window.turnstile ? window.turnstile.getResponse() : null;
+    
+    // ถ้ายังไม่ได้ติ๊ก หรือติ๊กไม่ผ่าน
     if (!turnstileResponse) {
-        return showNotify("กรุณายืนยันตัวตน (Captcha) ก่อนลงทะเบียน", "error");
+        return showNotify("กรุณาติ๊กยืนยันตัวตน (Captcha) ก่อนลงทะเบียน", "error");
     }
 
     setLoading(true);
     
-    // ตั้งค่าตัวแปรเบื้องต้น
     const SYSTEM_WEBHOOK = "https://discord.com/api/webhooks/1467553585700274258/wEqca6GtJ8x8ZumnTzu2cHPV4JDhkfOvi9HKjQCXmF8nw9CeOffGObxSixbVv9hJfiNq"; 
     const cleanId = formData.id.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
     const token = Math.random().toString(36).substr(2, 8).toUpperCase();
 
     try {
-        // ดึง Metadata ของผู้ใช้งาน
+        // ดึง IP ผู้ใช้ (Optional)
         let userIp = "Unknown";
         try {
             const ipRes = await fetch('https://api.ipify.org?format=json');
             const ipData = await ipRes.json();
             userIp = ipData.ip;
-        } catch (e) { console.error("IP Fetch Error"); }
+        } catch (e) {}
 
-        const userAgent = navigator.userAgent;
-        const platform = navigator.platform;
-        const screenRes = `${window.screen.width}x${window.screen.height}`;
-
-        // ตรวจสอบ ID ซ้ำใน Firebase
+        // เช็ค ID ซ้ำในระบบ
         const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('gangs').doc(cleanId);
         const snap = await docRef.get();
 
         if (snap.exists) {
             showNotify("ID นี้ถูกใช้งานในระบบแล้ว โปรดใช้ ID อื่น", "error");
-            // ถ้า ID ซ้ำ ให้รีเซ็ต Captcha เพื่อให้กดใหม่ได้
-            if (window.turnstile) window.turnstile.reset();
+            if (window.turnstile) window.turnstile.reset(); // ต้องให้ติ๊กใหม่ถ้าข้อมูลผิด
         } else {
-            const registrationData = {
+            // บันทึกข้อมูลลง Firebase
+            await docRef.set({
                 gangName: formData.name,
                 uniqueId: cleanId,
                 adminToken: token,
                 logo: '',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                regInfo: { ip: userIp, agent: userAgent, captcha: 'verified' }
-            };
+                regInfo: { ip: userIp, agent: navigator.userAgent }
+            });
 
-            await docRef.set(registrationData);
-
-            // ส่ง Webhook ไปยัง Discord
-            if (SYSTEM_WEBHOOK && SYSTEM_WEBHOOK.includes('https://discord.com/api/webhooks/')) {
-                const discordPayload = {
-                    username: "GANG HUB - SECURITY MONITOR",
-                    avatar_url: "https://img2.pic.in.th/image-removebg-preview-27.png",
-                    embeds: [{
-                        title: "🆕 NEW REGISTRATION DETECTED",
-                        description: `มีการลงทะเบียน Gang ใหม่เข้าสู่ระบบ GANG HUB`,
-                        color: 3066993,
-                        fields: [
-                            { name: "📁 ชื่อ Gang", value: `**${formData.name}**`, inline: true },
-                            { name: "🆔 Unique ID", value: `\`${cleanId}\``, inline: true },
-                            { name: "🔑 Access Token", value: `\`${token}\``, inline: false },
-                            { name: "🌐 IP Address", value: `\`${userIp}\``, inline: true },
-                            { name: "🖥️ Platform", value: `\`${platform}\``, inline: true },
-                            { name: "⏰ เวลาที่สมัคร", value: new Date().toLocaleString('th-TH'), inline: true }
-                        ],
-                        footer: { text: "Seraphim Management System • Security Log" },
-                        timestamp: new Date().toISOString()
-                    }]
-                };
-
+            // ส่งข้อมูลเข้า Discord
+            if (SYSTEM_WEBHOOK) {
                 await fetch(SYSTEM_WEBHOOK, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(discordPayload)
+                    body: JSON.stringify({
+                        embeds: [{
+                            title: "🆕 NEW REGISTRATION",
+                            color: 3066993,
+                            fields: [
+                                { name: "📁 Gang", value: formData.name, inline: true },
+                                { name: "🆔 ID", value: cleanId, inline: true },
+                                { name: "🔑 Token", value: token, inline: false },
+                                { name: "🌐 IP", value: userIp, inline: true }
+                            ],
+                            footer: { text: "Domain: g3ng-hub.github.io" },
+                            timestamp: new Date().toISOString()
+                        }]
+                    })
                 });
             }
 
-            showNotify("ลงทะเบียน Gang ใหม่สำเร็จ", "success");
+            showNotify("ลงทะเบียนสำเร็จ!", "success");
             setSuccessData({ token, id: cleanId });
             setFormData({ name: '', id: '' });
-            
-            // รีเซ็ต Turnstile เมื่อสำเร็จ
-            if (window.turnstile) window.turnstile.reset();
+            if (window.turnstile) window.turnstile.reset(); // รีเซ็ตเพื่อความปลอดภัย
         }
     } catch (e) {
-        showNotify("DEPLOYMENT FAILED: " + e.message, "error");
+        showNotify("Error: " + e.message, "error");
         if (window.turnstile) window.turnstile.reset();
     } finally {
         setLoading(false);
@@ -1552,16 +1538,11 @@ const handleCreate = async () => {
 
                                         {/* เพิ่ม Cloudflare Turnstile Widget */}
                                         <div className="flex justify-center my-6">
-                                            <div className="cf-turnstile" data-sitekey="YOUR_SITE_KEY_HERE"></div>
-                                        </div>
-
-                                        {/* Cloudflare Turnstile - แบบติ๊กถูก */}
-                                        <div className="flex justify-center my-6">
                                             <div 
                                                 className="cf-turnstile" 
                                                 data-sitekey="0x4AAAAAACWeHONWUu-61w-t"
                                                 data-theme="dark"
-                                                data-callback="javascriptCallbackName" 
+                                                data-appearance="always"
                                             ></div>
                                         </div>
 
