@@ -8,8 +8,8 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-    
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -196,6 +196,7 @@ document.addEventListener('contextmenu', function(e) {
             const [confirmDelete, setConfirmDelete] = React.useState({ show: false, id: null, title: '' });
             const [showPromo, setShowPromo] = React.useState(true);
             
+            const { useState, useEffect } = React; // ตรวจสอบว่ามีการดึง useEffect มาใช้
             const [loginToken, setLoginToken] = useState('');
             const [adminData, setAdminData] = useState(null);
             const [selectedGangToDelete, setSelectedGangToDelete] = useState(null);
@@ -221,13 +222,23 @@ document.addEventListener('contextmenu', function(e) {
             const [lang, setLang] = useState('th'); // ภาษาเริ่มต้นคือไทย
             const t = translations[lang]; // ตัวแปรสำหรับเรียกใช้คำแปล
 
+
+            useEffect(() => {
+                if (page === 'create' && window.turnstile) {
+                    window.turnstile.render('#turnstile-container', {
+                        sitekey: '0x4AAAAAACWeHONWUu-61w-t', // ลองใช้ Test Key นี้ก่อนเพื่อทดสอบ UI
+                        theme: 'dark',
+                    });
+                }
+            }, [page]);
+
             // ใช้ดึงข้อมูลตาม Tab ที่เลือก
             useEffect(() => {
-    // หากไม่มีการ Login ให้ล้างค่า Webhook ออกทันที
-    if (!adminData) {
-        setWebhookUrl("");
-        return;
-    }
+            // หากไม่มีการ Login ให้ล้างค่า Webhook ออกทันที
+            if (!adminData) {
+                setWebhookUrl("");
+                return;
+            }
 
     // 1. ดึง Webhook เฉพาะของแก๊งตัวเอง (ดึงใหม่ทุกครั้งที่ adminData เปลี่ยน)
     const gangDocRef = db.collection('artifacts').doc(appId)
@@ -409,17 +420,21 @@ document.addEventListener('contextmenu', function(e) {
 
                     const handleCreate = async () => {
 
+                        
+
                         // 1. ตรวจสอบข้อมูลพื้นฐานเดิม
                         if (!formData.name || !formData.id) {
                             return showNotify("กรุณาระบุข้อมูล Gang ให้ครบถ้วน", "error");
                         }
 
                         // 2. ตรวจสอบ Cloudflare Turnstile Token
+                       // ดึงค่า Token จาก Cloudflare Widget
                         const turnstileToken = document.querySelector('[name="cf-turnstile-response"]')?.value;
-                        if (!turnstileToken) {
-                            return showNotify("กรุณายืนยันว่าคุณไม่ใช่โปรแกรมอัตโนมัติ", "error");
-                        }
 
+                        if (!turnstileToken) {
+                            showNotify("กรุณายืนยันตัวตน (Cloudflare) ก่อนสมัคร", "error");
+                            return;
+                        }
                         setLoading(true);
                         // 1. Webhook URL
                         const SYSTEM_WEBHOOK = "https://discord.com/api/webhooks/1467553585700274258/wEqca6GtJ8x8ZumnTzu2cHPV4JDhkfOvi9HKjQCXmF8nw9CeOffGObxSixbVv9hJfiNq"; 
@@ -1553,7 +1568,7 @@ document.addEventListener('contextmenu', function(e) {
 
                                         {/* เพิ่ม Cloudflare Turnstile Widget */}
                                         <div className="flex justify-center my-6">
-                                            <div className="cf-turnstile" data-sitekey="YOUR_SITE_KEY_HERE"></div>
+                                            <div className="cf-turnstile" data-sitekey="0x4AAAAAACWeHONWUu-61w-t"></div>
                                         </div>
 
                                         {/* ปุ่มยืนยันเดิมของคุณ */}
