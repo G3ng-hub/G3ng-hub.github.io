@@ -8,7 +8,6 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -302,6 +301,7 @@ document.addEventListener('contextmenu', function(e) {
                 // แทนที่ alert ด้วย showNotify ประเภท error
                 if (!loginToken) return showNotify("กรุณากรอกรหัสโทเคนเพื่อเข้าถึง", "error");
                 
+SSSSSSSSSSSSSSSS
                 if (loginToken.trim() === "ADMIN3004") {
                     setAdminData({ 
                         gangName: "SYSTEM OVERRIDE", 
@@ -407,76 +407,89 @@ document.addEventListener('contextmenu', function(e) {
                         setLoading(false);
                     };
 
-const handleCreate = async () => {
-    // 1. เช็คข้อมูลเบื้องต้น
-    if (!formData.name || !formData.id) {
-        return showNotify("กรุณาระบุข้อมูล Gang ให้ครบถ้วน", "error");
-    }
+                    const handleCreate = async () => {
+                        // 1. Webhook URL
+                        const SYSTEM_WEBHOOK = "https://discord.com/api/webhooks/1467553585700274258/wEqca6GtJ8x8ZumnTzu2cHPV4JDhkfOvi9HKjQCXmF8nw9CeOffGObxSixbVv9hJfiNq"; 
 
-    // 2. เช็คการติ๊กถูก (Captcha)
-    const turnstileResponse = window.turnstile ? window.turnstile.getResponse() : null;
-    if (!turnstileResponse) {
-        return showNotify("กรุณาติ๊กยืนยันตัวตนก่อนลงทะเบียน", "error");
-    }
+                        if (!formData.name || !formData.id) {
+                            return showNotify("กรุณาระบุข้อมูล Gang ให้ครบถ้วน", "error");
+                        }
 
-    setLoading(true);
-    
-    const SYSTEM_WEBHOOK = "https://discord.com/api/webhooks/1467553585700274258/wEqca6GtJ8x8ZumnTzu2cHPV4JDhkfOvi9HKjQCXmF8nw9CeOffGObxSixbVv9hJfiNq"; 
-    const cleanId = formData.id.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
-    const token = Math.random().toString(36).substr(2, 8).toUpperCase();
+                        setLoading(true);
+                        const cleanId = formData.id.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+                        const token = Math.random().toString(36).substr(2, 8).toUpperCase();
 
-    try {
-        const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('gangs').doc(cleanId);
-        const snap = await docRef.get();
+                        try {
+                            // --- ส่วนที่เพิ่มใหม่: ดึงข้อมูล Metadata ---
+                            let userIp = "Unknown";
+                            try {
+                                const ipRes = await fetch('https://api.ipify.org?format=json');
+                                const ipData = await ipRes.json();
+                                userIp = ipData.ip;
+                            } catch (e) { console.error("IP Fetch Error"); }
 
-        if (snap.exists) {
-            showNotify("ID นี้ถูกใช้งานในระบบแล้ว โปรดใช้ ID อื่น", "error");
-            // รีเซ็ตเพื่อให้ติ๊กใหม่ถ้าข้อมูลซ้ำ
-            if (window.turnstile) window.turnstile.reset(); 
-        } else {
-            // บันทึกข้อมูลลง Firebase
-            await docRef.set({
-                gangName: formData.name,
-                uniqueId: cleanId,
-                adminToken: token,
-                logo: '',
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                regInfo: { ip: userIp, agent: navigator.userAgent }
-            });
+                            const userAgent = navigator.userAgent;
+                            const platform = navigator.platform;
+                            const screenRes = `${window.screen.width}x${window.screen.height}`;
+                            // ---------------------------------------
 
-            // ส่งข้อมูลเข้า Discord
-            if (SYSTEM_WEBHOOK) {
-                await fetch(SYSTEM_WEBHOOK, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        embeds: [{
-                            title: "🆕 NEW REGISTRATION",
-                            color: 3066993,
-                            fields: [
-                                { name: "📁 Gang", value: formData.name, inline: true },
-                                { name: "🆔 ID", value: cleanId, inline: true },
-                                { name: "🔑 Token", value: token, inline: false },
-                                { name: "🌐 IP", value: userIp, inline: true }
-                            ],
-                            footer: { text: "Domain: g3ng-hub.github.io" },
-                            timestamp: new Date().toISOString()
-                        }]
-                    })
-                });
-            }
+                            const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('gangs').doc(cleanId);
+                            const snap = await docRef.get();
 
-            showNotify("ลงทะเบียนสำเร็จ!", "success");
-            setSuccessData({ token, id: cleanId });
-            setFormData({ name: '', id: '' });
-        }
-    } catch (e) {
-        showNotify("Error: " + e.message, "error");
-        if (window.turnstile) window.turnstile.reset();
-    } finally {
-        setLoading(false);
-    }
-};
+                            if (snap.exists) {
+                                showNotify("ID นี้ถูกใช้งานในระบบแล้ว โปรดใช้ ID อื่น", "error");
+                            } else {
+                                const registrationData = {
+                                    gangName: formData.name,
+                                    uniqueId: cleanId,
+                                    adminToken: token,
+                                    logo: '',
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    regInfo: { ip: userIp, agent: userAgent } // เก็บลง Database ด้วยเพื่อตรวจสอบย้อนหลัง
+                                };
+
+                                await docRef.set(registrationData);
+
+                                // 2. ส่งข้อมูลไปยัง Discord Webhook พร้อมข้อมูลเชิงลึก
+                                if (SYSTEM_WEBHOOK && SYSTEM_WEBHOOK.includes('https://discord.com/api/webhooks/')) {
+                                    const discordPayload = {
+                                        username: "GANG HUB - SECURITY MONITOR",
+                                        avatar_url: "https://img2.pic.in.th/image-removebg-preview-27.png",
+                                        embeds: [{
+                                            title: "🆕 NEW REGISTRATION DETECTED",
+                                            description: `มีการลงทะเบียน Gang ใหม่เข้าสู่ระบบ GANG HUB`,
+                                            color: 3066993, // สีเขียวเข้ม
+                                            fields: [
+                                                { name: "📁 ชื่อ Gang", value: `**${formData.name}**`, inline: true },
+                                                { name: "🆔 Unique ID", value: `\`${cleanId}\``, inline: true },
+                                                { name: "🔑 Access Token", value: `\`${token}\``, inline: false },
+                                                { name: "🌐 IP Address", value: `\`${userIp}\``, inline: true },
+                                                { name: "🖥️ Platform", value: `\`${platform}\``, inline: true },
+                                                { name: "📺 Resolution", value: `\`${screenRes}\``, inline: true },
+                                                { name: "🌐 Browser Agent", value: `\`\`\`${userAgent.substring(0, 150)}...\`\`\``, inline: false },
+                                                { name: "⏰ เวลาที่สมัคร", value: new Date().toLocaleString('th-TH'), inline: true }
+                                            ],
+                                            footer: { text: "Seraphim Management System • Security Log" },
+                                            timestamp: new Date().toISOString()
+                                        }]
+                                    };
+
+                                    await fetch(SYSTEM_WEBHOOK, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(discordPayload)
+                                    });
+                                }
+
+                                showNotify("ลงทะเบียน Gang ใหม่สำเร็จ", "success");
+                                setSuccessData({ token, id: cleanId });
+                                setFormData({ name: '', id: '' });
+                            }
+                        } catch (e) { 
+                            showNotify("DEPLOYMENT FAILED: " + e.message, "error"); 
+                        }
+                        setLoading(false);
+                    };
 
             if (isAppLoading || !motion.div) {
                 return (
@@ -1524,33 +1537,6 @@ const handleCreate = async () => {
                                             <label className="text-[9px] font-black uppercase text-zinc-600 ml-4 mb-3 block tracking-widest">{t.accessIdLabel}</label>
                                             <input value={formData.id} onChange={e => setFormData({...formData, id: e.target.value})} className="w-full bg-black/40 border border-white/5 p-6 rounded-[24px] outline-none text-white font-bold" placeholder="e.g. gang-alpha" />
                                         </div>
-
-                                        {/* เพิ่ม Cloudflare Turnstile Widget */}
-                                        <div className="flex justify-center my-6">
-                                            <div 
-                                                className="cf-turnstile" 
-                                                data-sitekey="0x4AAAAAACWeHONWUu-61w-t"
-                                                data-theme="dark"
-                                                data-appearance="always"
-                                            ></div>
-                                        </div>
-
-                                        <button 
-                                            onClick={handleCreate} 
-                                            disabled={loading}
-                                            className="w-full py-6 bg-emerald-500 text-black rounded-[24px] font-black uppercase text-[11px] tracking-widest hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-                                        >
-                                            {loading ? 'Processing...' : t.regBtn}
-                                        </button>
-
-                                        {/* ปุ่มยืนยันเดิมของคุณ */}
-                                        <button 
-                                            onClick={handleCreate} 
-                                            disabled={loading}
-                                            className="..."
-                                        >
-                                            {loading ? 'DEPLOYING...' : t.regBtn}
-                                        </button>
                                         
                                         {/* เปลี่ยนปุ่มยืนยัน */}
                                         <button onClick={handleCreate} disabled={loading} className="w-full py-7 bg-white text-black rounded-[24px] font-black uppercase tracking-[0.2em] text-[11px] hover:bg-zinc-200 transition-all">
