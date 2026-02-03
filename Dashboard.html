@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MASTER GANG HUB</title>
+    <link rel="icon" type="image/png" href="https://img2.pic.in.th/image-removebg-preview-27.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        body { font-family: 'Anuphan', sans-serif; background: #050505; color: white; overflow-x: hidden; }
+        .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+        .input-focus:focus { outline: none; border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
+
+        .notify-glass {
+                background: rgba(0, 0, 0, 0.85);
+                backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            }
+
+            .notify-progress {
+                height: 2px;
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                border-radius: 0 0 0 12px;
+            }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        const MotionLib = window.Motion || window.FramerMotion;
+        const motion = MotionLib.motion;
+        const AnimatePresence = MotionLib.AnimatePresence;
+
+        // ระบบป้องกันการเปิดดูโค้ดและเซฟหน้าเว็บ (อัปเดตใหม่)
+document.addEventListener('keydown', function(e) {
+    // 1. ป้องกัน Ctrl + S (Save Page)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S' || e.keyCode === 83)) {
+        e.preventDefault();
+        // showAlert("ไม่อนุญาตให้บันทึกหน้าเว็บ", "danger"); // เปิดใช้ถ้าต้องการให้แจ้งเตือน
+        return false;
+    }
+
+    // 2. ป้องกัน F12 (DevTools)
+    if (e.key === 'F12' || e.keyCode === 123) {
+        e.preventDefault();
+        return false;
+    }
+
+    // 3. ป้องกัน Ctrl + Shift + I / J / C (Inspect/Console)
+    if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C' || e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) {
+        e.preventDefault();
+        return false;
+    }
+
+    // 4. ป้องกัน Ctrl + U (View Source)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U' || e.keyCode === 85)) {
+        e.preventDefault();
+        return false;
+    }
+}, false);
+
+// 5. ป้องกันการคลิกขวา (Context Menu)
+document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+}, false);
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAwdFwUViS7tVi2ocgC1QKOEOT5tRyvQsY",
+            authDomain: "xtenshop-83f3c.firebaseapp.com",
+            projectId: "xtenshop-83f3c",
+            storageBucket: "xtenshop-83f3c.firebasestorage.app",
+            messagingSenderId: "289996510175",
+            appId: "1:289996510175:web:b595779c45ce9a36fe6a6a",
+            measurementId: "G-4111SVLDKD"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // --- DISCORD LOG FUNCTION ---
+        const sendDiscordLog = async (title, message, color = 65280) => {
+            const webhookUrl = localStorage.getItem('discord_webhook');
+            if (!webhookUrl) return;
+
+            const embed = {
+                title: title,
+                description: message,
+                color: color,
+                timestamp: new Date().toISOString(),
+                footer: { text: "XTEN GANG HUB ADMIN SYSTEM" }
+            };
+
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ embeds: [embed] })
+                });
+            } catch (err) { console.error("Discord Log Error:", err); }
+        };
+
+        
+        const Dashboard = () => {
+            const [activeTab, setActiveTab] = useState('overview');
+            const [gangs, setGangs] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [editingId, setEditingId] = useState(null);
+            const [editData, setEditData] = useState({});
+            const [webhook, setWebhook] = useState(localStorage.getItem('discord_webhook') || '');
+
+            // --- เพิ่ม 2 ส่วนนี้ลงไป ---
+            const [notify, setNotify] = React.useState({ show: false, message: '', type: 'success' });
+
+            const showNotify = (message, type = 'success') => {
+                setNotify({ show: true, message, type });
+                setTimeout(() => {
+                    setNotify(prev => ({ ...prev, show: false }));
+                }, 3000);
+            };
+
+            useEffect(() => {
+                const unsubscribe = db.collection('artifacts/xten-gang-hub-v1/public/data/gangs')
+                    .onSnapshot((snapshot) => {
+                        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setGangs(list);
+                        setLoading(false);
+                    });
+                return () => unsubscribe();
+            }, []);
+            
+
+            const filteredGangs = useMemo(() => {
+                return gangs.filter(g => 
+                    g.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                    g.id?.toLowerCase().includes(searchTerm.toLowerCase())
+                );
+            }, [gangs, searchTerm]);
+
+            const handleUpdate = async (id) => {
+                try {
+                    // สร้าง Object ข้อมูลที่จะอัปเดต โดยเน้นฟิลด์ที่กำหนด
+                    const updatePayload = {
+                        gangName: editData.gangName || '',
+                        adminToken: editData.adminToken || '',
+                        logo: editData.logo || ''
+                    };
+
+                    await db.collection('artifacts/xten-gang-hub-v1/public/data/gangs').doc(id).update(updatePayload);
+                    
+                    // แก้ไข Log ให้ดึง gangName มาแสดง
+                    sendDiscordLog(
+                        "📝 DATA UPDATED", 
+                        `Admin updated information for gang: **${updatePayload.gangName}**\nID: ${id}\nNew Token: \`${updatePayload.adminToken}\``, 
+                        16753920
+                    );
+                    
+                    setEditingId(null);
+                            // เปลี่ยนจาก alert เป็น showNotify
+                            showNotify("บันทึกข้อมูลสำเร็จ!", "success"); 
+                            
+                        } catch (err) { 
+                            console.error(err);
+                            // เปลี่ยนจาก alert เป็น showNotify แบบ error
+                            showNotify("เกิดข้อผิดพลาด: " + err.message, "error"); 
+                        }
+            };
+
+const toggleStatus = async (id, currentStatus, gangName) => {
+    try {
+        // ถ้า status เป็น undefined หรือ active ให้เปลี่ยนเป็น inactive
+        const newStatus = currentStatus === 'inactive' ? 'active' : 'inactive';
+        
+        await db.collection('artifacts/xten-gang-hub-v1/public/data/gangs').doc(id).update({
+            status: newStatus
+        });
+        
+        // ส่ง Log ไปยัง Discord เพื่อให้รู้ว่าใครโดนแช่แข็งหรือปลดแช่แข็ง
+        const statusEmoji = newStatus === 'active' ? '🟢' : '❄️';
+        sendDiscordLog(
+            `${statusEmoji} STATUS UPDATE`, 
+            `Gang: **${gangName}**\nNew Status: **${newStatus.toUpperCase()}**\nTime: ${new Date().toLocaleString('th-TH')}`, 
+            newStatus === 'active' ? 3066993 : 15158332
+        );
+
+    } catch (err) {
+        console.error("Error updating status:", err);
+        alert("ไม่สามารถเปลี่ยนสถานะได้: " + err.message);
+    }
+};
+            const handleDelete = async (id, name) => {
+    if (window.confirm(`❗ ยืนยันการลบแก๊ง "${name}"? ข้อมูลจะหายถาวร!`)) {
+        try {
+            await db.collection('artifacts/xten-gang-hub-v1/public/data/gangs').doc(id).delete();
+            
+            sendDiscordLog(
+                "🔥 GANG TERMINATED", 
+                `Admin deleted gang: **${name}**\nID: ${id}`, 
+                16711680
+            );
+            
+            // แก้ไขจาก gangName เป็น name ให้ตรงกับ parameter
+            showNotify(`ลบแก๊ง ${name} เรียบร้อยแล้ว`, 'success'); 
+        } catch (err) {
+            console.error(err);
+            showNotify("เกิดข้อผิดพลาดในการลบข้อมูล", "error");
+        }
+    }
+};
+
+            const saveSettings = () => {
+                if (!webhook.includes('discord.com/api/webhooks')) {
+                    alert("กรุณาใส่ Discord Webhook URL ที่ถูกต้อง");
+                    return;
+                }
+                localStorage.setItem('discord_webhook', webhook);
+                alert("บันทึกการตั้งค่า Webhook เรียบร้อยแล้ว");
+                
+                // ส่ง Log ทดสอบเมื่อกดบันทึก
+                sendDiscordLog("✅ SYSTEM LINKED", "Dashboard has been successfully linked to this channel.", 1752220);
+            };
+
+            return (
+                <div className="min-h-screen">
+                    {/* Top Nav */}
+                    <nav className="glass-card sticky top-0 z-[100] px-8 py-4 border-b border-emerald-500/10">
+                        <div className="max-w-7xl mx-auto flex justify-between items-center">
+                            <div className="flex items-center gap-4">
+                                <img src="https://img2.pic.in.th/image-removebg-preview-27.png" className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-black text-xl" alt="Logo" />
+                                <div>
+                                    <h1 className="text-lg font-black uppercase tracking-tighter italic">GANG HUB ADMIN Control</h1>
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
+                                        <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">System Online</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <input 
+                                    type="text" 
+                                    placeholder="SEARCH GANG ID / NAME..."
+                                    className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[10px] font-bold w-64 input-focus uppercase"
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                                <button onClick={() => window.location.href='index.html'} className="px-6 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all">Exit</button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <div className="max-w-7xl mx-auto p-8 flex gap-8">
+                        {/* Sidebar */}
+                        <div className="w-72 flex flex-col gap-3">
+                            {[
+                                { id: 'overview', label: 'Dashboard Overview', icon: '' },
+                                { id: 'manage', label: 'Database Manage', icon: '' },
+                                { id: 'logs', label: 'Activity Logs', icon: '' },
+                                { id: 'settings', label: 'System Settings', icon: '' },
+                            ].map(item => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => setActiveTab(item.id)}
+                                    className={`p-4 rounded-2xl flex items-center gap-4 transition-all border ${
+                                        activeTab === item.id ? 'bg-emerald-500 border-emerald-400 text-black font-black shadow-lg shadow-emerald-500/20' : 'bg-white/5 border-transparent text-zinc-400 hover:bg-white/10'
+                                    }`}
+                                >
+                                    <span className="text-xl">{item.icon}</span>
+                                    <span className="text-xs uppercase tracking-widest">{item.label}</span>
+                                </button>
+                            ))}
+
+                            <div className="mt-10 p-6 glass-card rounded-[2rem] border-emerald-500/20 bg-emerald-500/5">
+                                <p className="text-[10px] font-black uppercase text-emerald-500 mb-2">Server Info</p>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between text-[11px] font-bold"><span className="text-zinc-500">Uptime</span><span>99.9%</span></div>
+                                    <div className="flex justify-between text-[11px] font-bold"><span className="text-zinc-500">Region</span><span>TH-BKK</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Main Content */}
+                        <div className="flex-1">
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={activeTab}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="glass-card rounded-[2.5rem] p-8 min-h-[600px]"
+                                >
+                                    {activeTab === 'overview' && (
+                                        <div className="space-y-8">
+                                            <div className="grid grid-cols-3 gap-6">
+                                                <div className="p-8 bg-gradient-to-br from-emerald-500/20 to-transparent border border-emerald-500/20 rounded-[2rem]">
+                                                    <p className="text-zinc-500 text-[10px] font-black uppercase mb-2">Total Gangs</p>
+                                                    <h3 className="text-5xl font-black italic">{gangs.length}</h3>
+                                                </div>
+                                                <div className="p-8 bg-gradient-to-br from-blue-500/20 to-transparent border border-blue-500/20 rounded-[2rem]">
+                                                    <p className="text-zinc-500 text-[10px] font-black uppercase mb-2">Active Tokens</p>
+                                                    <h3 className="text-5xl font-black italic">{gangs.filter(g => g.token).length}</h3>
+                                                </div>
+                                                <div className="p-8 bg-gradient-to-br from-purple-500/20 to-transparent border border-purple-500/20 rounded-[2rem]">
+                                                    <p className="text-zinc-500 text-[10px] font-black uppercase mb-2">DB Queries</p>
+                                                    <h3 className="text-5xl font-black italic">Live</h3>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="space-y-4">
+                                                <h2 className="text-xl font-black italic uppercase border-l-4 border-emerald-500 pl-4">Recently Added</h2>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    {gangs.slice(-4).reverse().map(gang => (
+                                                        <div key={gang.id} className="p-4 bg-white/5 rounded-2xl flex items-center gap-4">
+                                                            <img src={gang.logo} className="w-12 h-12 rounded-xl object-cover bg-black" />
+                                                            <div>
+                                                                <p className="font-black uppercase text-sm">{gang.name}</p>
+                                                                <p className="text-[10px] text-emerald-500 font-mono italic">{gang.token}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'manage' && (
+                                        <div className="space-y-6">
+                                            <div className="flex justify-between items-center">
+                                                <h2 className="text-2xl font-black italic uppercase tracking-tighter">Database Management</h2>
+                                                <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase">Total: {filteredGangs.length}</span>
+                                            </div>
+
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full">
+                                                    <thead>
+                                                        <tr className="text-[10px] font-black uppercase text-zinc-500 border-b border-white/5 text-left italic tracking-widest">
+                                                            <th className="pb-4 pl-4">Gang Identity</th>
+                                                            <th className="pb-4">Access Token</th>
+                                                            <th className="pb-4">Logo URL</th>
+                                                            <th className="pb-4 text-right pr-4">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {filteredGangs.map(gang => (
+                                                    <tr key={gang.id} className="group hover:bg-white/[0.02] transition-all duration-300">
+                                                        {/* 1. ข้อมูลแก๊ง (Logo & Name) */}
+                                                        <td className="py-5 pl-4">
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="relative group/logo">
+                                                                    <img 
+                                                                        src={gang.logo || 'https://via.placeholder.com/100?text=GANG'} 
+                                                                        className={`w-12 h-12 rounded-2xl object-cover bg-black border transition-all duration-500 ${gang.status === 'inactive' ? 'border-red-500/50 grayscale' : 'border-white/10 group-hover/logo:border-emerald-500/50'}`} 
+                                                                    />
+                                                                    {gang.status === 'inactive' && (
+                                                                        <div className="absolute inset-0 bg-red-500/20 rounded-2xl flex items-center justify-center">
+                                                                            <span className="text-[8px] font-black text-white bg-red-600 px-1 rounded">FROZEN</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div>
+                                                                    {editingId === gang.id ? (
+                                                                        <input 
+                                                                            value={editData.gangName || ''} 
+                                                                            onChange={e => setEditData({...editData, gangName: e.target.value})}
+                                                                            className="bg-emerald-500/10 border border-emerald-500/50 rounded-lg px-2 py-1 text-sm font-black text-emerald-400 outline-none w-40"
+                                                                        />
+                                                                    ) : (
+                                                                        <>
+                                                                            <p className={`font-black uppercase text-sm tracking-tight transition-colors ${gang.status === 'inactive' ? 'text-zinc-500' : 'text-white'}`}>
+                                                                                {gang.gangName || 'Unnamed Gang'}
+                                                                            </p>
+                                                                            <p className="text-[9px] text-zinc-600 font-mono tracking-tighter italic">ID: {gang.id}</p>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+
+                                                        {/* 2. Admin Token (สวยงาม & คัดลอกได้) */}
+                                                        <td className="py-5">
+                                                            <div className="flex items-center gap-2 group/token">
+                                                                <div className="relative">
+                                                                    <input 
+                                                                        readOnly={editingId !== gang.id}
+                                                                        value={editingId === gang.id ? (editData.adminToken || '') : (gang.adminToken || 'N/A')}
+                                                                        onChange={e => setEditData({...editData, adminToken: e.target.value})}
+                                                                        className={`
+                                                                            font-mono text-[10px] font-bold uppercase px-3 py-2 rounded-xl border transition-all duration-300
+                                                                            ${editingId === gang.id 
+                                                                                ? 'bg-black border-emerald-500 text-emerald-400 w-36 shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
+                                                                                : gang.status === 'inactive'
+                                                                                    ? 'bg-red-500/5 border-red-500/20 text-red-400/50 w-28 cursor-not-allowed'
+                                                                                    : 'bg-white/5 border-white/10 text-zinc-400 w-28 group-hover/token:border-emerald-500/30 group-hover/token:text-emerald-500'}
+                                                                        `}
+                                                                    />
+                                                                </div>
+                                                                {editingId !== gang.id && gang.adminToken && (
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        navigator.clipboard.writeText(gang.adminToken);
+                                                                        // เปลี่ยนจาก alert เป็นอันนี้
+                                                                        showNotify("คัดลอก Token ลง Clipboard แล้ว", "success");
+                                                                    }}
+                                                                    className="p-2 text-zinc-400 hover:text-emerald-500 transition-colors"
+                                                                    title="Copy Token"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                                                    </svg>
+                                                                </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* 3. วันที่สร้าง (Minimal Style) */}
+                                                        <td className="py-5 hidden md:table-cell">
+                                                            <div className="flex items-center gap-2 text-zinc-500">
+                                                                <svg className="w-3 h-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                                <span className="text-[10px] font-mono tracking-tighter">
+                                                                    {gang.createdAt?.seconds ? new Date(gang.createdAt.seconds * 1000).toLocaleDateString('th-TH') : '---'}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+
+                                                        {/* 4. ปุ่มควบคุม (Combined Actions) */}
+                                                        <td className="py-5 pr-4 text-right">
+                                                            <div className="flex justify-end items-center gap-1.5">
+                                                                {editingId === gang.id ? (
+                                                                    <div className="flex gap-1">
+                                                                        <button onClick={() => handleUpdate(gang.id)} className="px-3 py-1.5 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-lg hover:bg-emerald-400 shadow-lg shadow-emerald-500/20">Save</button>
+                                                                        <button onClick={() => setEditingId(null)} className="px-3 py-1.5 bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase rounded-lg hover:bg-zinc-700">Cancel</button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        {/* ปุ่มระงับ/เปิดใช้งาน */}
+                                                                        <button 
+                                                                            onClick={() => toggleStatus(gang.id, gang.status, gang.gangName)}
+                                                                            className={`p-2 rounded-xl transition-all duration-300 border ${
+                                                                                gang.status === 'inactive' 
+                                                                                ? 'bg-red-500/10 border-red-500/50 text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]' 
+                                                                                : 'bg-white/5 border-white/5 text-zinc-500 hover:border-orange-500/50 hover:text-orange-500 hover:bg-orange-500/5'
+                                                                            }`}
+                                                                            title={gang.status === 'inactive' ? "Activate" : "Freeze"}
+                                                                        >
+                                                                            {gang.status === 'inactive' ? (
+                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                                                            ) : (
+                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                                                                            )}
+                                                                        </button>
+
+                                                                        {/* ปุ่มแก้ไข */}
+                                                                        <button 
+                                                                            onClick={() => { setEditingId(gang.id); setEditData(gang); }}
+                                                                            className="p-2 bg-white/5 border border-white/5 text-zinc-500 hover:border-blue-500/50 hover:text-blue-500 hover:bg-blue-500/5 rounded-xl transition-all"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                                        </button>
+
+                                                                        {/* ปุ่มลบ */}
+                                                                        <button 
+                                                                            onClick={() => handleDelete(gang.id, gang.gangName)}
+                                                                            className="p-2 bg-white/5 border border-white/5 text-zinc-500 hover:border-red-500/50 hover:text-red-500 hover:bg-red-500/5 rounded-xl transition-all"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'logs' && (
+                                        <div className="space-y-6">
+                                            <h2 className="text-2xl font-black italic uppercase border-l-4 border-emerald-500 pl-4">Live System Logs</h2>
+                                            <div className="bg-black/50 border border-white/5 rounded-3xl p-6 font-mono text-[11px] h-[500px] overflow-y-auto space-y-3">
+                                                {gangs.map((g, i) => (
+                                                    <div key={i} className="flex gap-4 border-b border-white/5 pb-2">
+                                                        <span className="text-zinc-600">[{new Date().toLocaleTimeString()}]</span>
+                                                        <span className="text-blue-500 font-bold uppercase tracking-tighter">[STORAGE_SCAN]</span>
+                                                        <span className="text-zinc-400 italic">Indexed gang entry for "{g.name}" with token {g.token}</span>
+                                                    </div>
+                                                ))}
+                                                <div className="flex gap-4 text-emerald-500 font-bold animate-pulse">
+                                                    <span>[{new Date().toLocaleTimeString()}]</span>
+                                                    <span>[SYSTEM_IDLE]</span>
+                                                    <span>Awaiting administrator commands...</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                {activeTab === 'settings' && (
+                                    <div className="space-y-8 max-w-3xl">
+                                        <div className="relative">
+                                            <h2 className="text-3xl font-black uppercase italic tracking-tighter border-l-8 border-emerald-500 pl-6 mb-2">
+                                                System Endpoint
+                                            </h2>
+                                            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] pl-8">
+                                                External Connection & Security Logs
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-6">
+                                            {/* Discord Webhook Card */}
+                                            <div className="glass-card rounded-[2.5rem] p-8 border-white/5 relative overflow-hidden group">
+                                                {/* Background Decor */}
+                                                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 blur-[100px] rounded-full -mr-20 -mt-20"></div>
+                                                
+                                                <div className="relative z-10 space-y-6">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-12 h-12 bg-[#5865F2]/10 rounded-2xl flex items-center justify-center text-[#5865F2] shadow-inner">
+                                                                <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.086 2.157 2.419c0 1.334-.947 2.419-2.157 2.419zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.086 2.157 2.419c0 1.334-.946 2.419-2.157 2.419z"/></svg>
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-white font-black uppercase text-sm tracking-widest">Discord Integration</h3>
+                                                                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">Automatic System Event Logs</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className={`px-4 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest ${webhook ? 'border-emerald-500/20 text-emerald-500 bg-emerald-500/5' : 'border-zinc-500/20 text-zinc-500'}`}>
+                                                            {webhook ? '● Connected' : '○ No Link'}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-4">
+                                                        <div className="relative group/input">
+                                                            <label className="absolute -top-2 left-4 px-2 bg-[#0a0a0a] text-[9px] font-black text-[#5865F2] uppercase tracking-[0.2em] z-20">Webhook URL Endpoint</label>
+                                                            <input 
+                                                                type="password"
+                                                                value={webhook}
+                                                                onChange={e => setWebhook(e.target.value)}
+                                                                placeholder="PASTE DISCORD WEBHOOK URL HERE..."
+                                                                className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-xs font-mono text-zinc-300 focus:border-[#5865F2] focus:ring-4 focus:ring-[#5865F2]/10 transition-all outline-none"
+                                                            />
+                                                        </div>
+
+                                                        <div className="flex gap-3">
+                                                            <button 
+                                                                onClick={saveSettings}
+                                                                className="flex-1 py-4 bg-[#5865F2] hover:bg-[#4752c4] text-white font-black uppercase text-[11px] tracking-[0.2em] rounded-2xl transition-all shadow-lg shadow-[#5865F2]/20 active:scale-95"
+                                                            >
+                                                                Update Connection
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => { setWebhook(''); localStorage.removeItem('discord_webhook'); }}
+                                                                className="px-6 py-4 bg-white/5 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 font-black uppercase text-[10px] rounded-2xl border border-white/5 transition-all"
+                                                            >
+                                                                Reset
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Instruction Box */}
+                                                    <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                                                        <div className="flex gap-3 items-start">
+                                                            <span className="text-lg">💡</span>
+                                                            <div className="text-[10px] text-zinc-500 font-bold leading-relaxed uppercase">
+                                                                <p className="text-zinc-400 mb-1">How to use:</p>
+                                                                1. สร้าง Webhook ใน Server Discord ของคุณ (Channel Settings - Integrations)<br/>
+                                                                2. คัดลอก URL มาวางที่นี่ และกด Update<br/>
+                                                                3. ระบบจะส่งบันทึกการ แก้ไข/ลบ ข้อมูลเข้า Discord ทันที
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        
+                                    </div>
+                                )}
+                                </motion.div>
+                            </AnimatePresence>
+                            {/* --- วาง UI Notify ใหม่ตรงนี้ --- */}
+                        <AnimatePresence>
+                            {notify.show && (
+                                <motion.div
+                                    initial={{ opacity: 0, x: 100, scale: 0.9 }}
+                                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                                    exit={{ opacity: 0, x: 100, scale: 0.9 }}
+                                    className="fixed top-6 right-6 z-[9999] w-80 overflow-hidden rounded-2xl notify-glass"
+                                >
+                                    <div className="p-5 flex items-center gap-4 relative">
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                                            notify.type === 'success' 
+                                            ? 'bg-emerald-500/20 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' 
+                                            : 'bg-red-500/20 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                                        }`}>
+                                            {notify.type === 'success' ? (
+                                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
+                                            ) : (
+                                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                            )}
+                                        </div>
+
+                                        <div className="flex flex-col">
+                                            <span className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${
+                                                notify.type === 'success' ? 'text-emerald-500' : 'text-red-500'
+                                            }`}>
+                                                {notify.type === 'success' ? 'Success Action' : 'System Error'}
+                                            </span>
+                                            <span className="text-white text-sm font-bold leading-tight italic uppercase tracking-tight">
+                                                {notify.message}
+                                            </span>
+                                        </div>
+
+                                        {/* Progress Bar */}
+                                        <motion.div 
+                                            initial={{ width: "100%" }}
+                                            animate={{ width: "0%" }}
+                                            transition={{ duration: 3, ease: "linear" }}
+                                            className={`notify-progress ${
+                                                notify.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'
+                                            }`}
+                                            style={{ height: '2px', position: 'absolute', bottom: 0, left: 0 }}
+                                        />
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                    </div> {/* ปิด div หลัก */}
+                </div>
+            </div>
+        );
+    };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<Dashboard />);
+    </script>
+</body>
+</html>
